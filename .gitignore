@@ -1,0 +1,29 @@
+.DS_Store
+
+# Python cache and virtual environments
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+
+# Build and packaging artifacts
+build/
+dist/
+*.egg-info/
+*.spec.backup
+
+# Local test/output artifacts
+testoutputs1/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local environment/configuration
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
