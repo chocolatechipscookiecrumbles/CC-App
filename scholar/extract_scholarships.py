@@ -88,7 +88,14 @@ def extract_scholarships(pdf_path):
 
     return male_data, female_data
 
-def process_folder(folder_path, exclude_words=None, manifest=None):
+def process_folder(
+    folder_path,
+    exclude_words=None,
+    manifest=None,
+    summary=None,
+    progress_reporter=None,
+    cancel_token=None,
+):
     """
     Process an entire folder of PDFs, return two DataFrames (male, female)
     and a list of all unique sports across all files.
@@ -103,10 +110,26 @@ def process_folder(folder_path, exclude_words=None, manifest=None):
 
     records = manifest if manifest is not None else build_pdf_manifest(folder_path)
 
-    for record in records:
+    total = len(records)
+
+    for index, record in enumerate(records, start=1):
+        if cancel_token and cancel_token.is_cancelled:
+            if summary:
+                summary.cancelled = True
+            break
+
         file = record.filename
         pdf_path = record.path
         institution_name = record.institution_name
+
+        if progress_reporter:
+            progress_reporter.update(
+                current=index,
+                total=total,
+                institution=institution_name,
+                stage="Extracting scholarships",
+                skipped_count=summary.skipped_count if summary else len(nonpdf),
+            )
 
         '''male, female = extract_scholarships(pdf_path)
         if male == {} and female == {}:
@@ -124,11 +147,22 @@ def process_folder(folder_path, exclude_words=None, manifest=None):
 
         # THEN check emptiness
         if not male and not female:
-            nonpdf.append(file)
+            if summary:
+                summary.add_skipped(
+                    file,
+                    path=pdf_path,
+                    institution_name=institution_name,
+                    reason="empty_result",
+                    stage="scholarship_extraction",
+                )
+            else:
+                nonpdf.append(file)
             continue
 
         # Save for DataFrame construction
         count += 1
+        if summary:
+            summary.add_processed()
         all_male_data[institution_name] = male or {}
         all_female_data[institution_name] = female or {}
         '''if client:
@@ -195,6 +229,6 @@ def process_folder(folder_path, exclude_words=None, manifest=None):
     print("Duplicate institution names:", dupes)
     print("Number duplicates:", len(dupes))
     print("Total unique institutions:", len(names))'''
-    write_report(folder_path,nonpdf)
+    write_report(folder_path, summary.skipped_files if summary else nonpdf)
     #print(male_df, female_df)
     return male_sorted, female_sorted, parsed_unique_sports_m,parsed_unique_sports_f, count

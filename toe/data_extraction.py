@@ -19,7 +19,14 @@ def extract_total_operating_expensesregx(pdf_path):
     return None
 
 
-def parse_folder_toe(folder_path, client_uni, manifest=None):
+def parse_folder_toe(
+    folder_path,
+    client_uni,
+    manifest=None,
+    summary=None,
+    progress_reporter=None,
+    cancel_token=None,
+):
     data = []  # store (university, value)
     client_value = None
     not_read = []
@@ -28,15 +35,41 @@ def parse_folder_toe(folder_path, client_uni, manifest=None):
     records = manifest if manifest is not None else build_pdf_manifest(folder_path)
 
     # Loop PDFs
-    for record in records:
+    total = len(records)
+
+    for index, record in enumerate(records, start=1):
+        if cancel_token and cancel_token.is_cancelled:
+            if summary:
+                summary.cancelled = True
+            break
+
         file_name = record.filename
         pdf_path = record.path
+        if progress_reporter:
+            progress_reporter.update(
+                current=index,
+                total=total,
+                institution=record.institution_name,
+                stage="Extracting total operating expenses",
+                skipped_count=summary.skipped_count if summary else len(not_read),
+            )
         toe_value = extract_total_operating_expensesregx(pdf_path)
         if toe_value is None:
-            not_read.append(file_name)
+            if summary:
+                summary.add_skipped(
+                    file_name,
+                    path=pdf_path,
+                    institution_name=record.institution_name,
+                    reason="section_not_found",
+                    stage="toe_extraction",
+                )
+            else:
+                not_read.append(file_name)
             continue
 
         university = record.institution_name
+        if summary:
+            summary.add_processed()
 
         if university == client_uni:
             client_value = toe_value  # store but don’t list below
@@ -45,7 +78,7 @@ def parse_folder_toe(folder_path, client_uni, manifest=None):
 
     df = pd.DataFrame(data, columns=["University", "TOE"])
     df = df.sort_values(by="University")
-    write_report(folder_path, not_read)
+    write_report(folder_path, summary.skipped_files if summary else not_read)
 
     return df, len(df) + 1, client_value
 

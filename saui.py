@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import messagebox, ttk
 import multiprocessing
+from programlauncher.common import settings
 
 def center_window(win):
     win.update_idletasks()  # ensure geometry is calculated
@@ -108,7 +109,9 @@ def create_launcher_ui():
     """Create and run the launcher UI"""
 
     def get_include_client_flag():
-        return True if include_var.get() == "Yes" else False
+        include_client = True if include_var.get() == "Yes" else False
+        settings.remember_include_client(include_client)
+        return include_client
 
 
     # ------------------ Root ------------------
@@ -145,7 +148,8 @@ def create_launcher_ui():
         text="Include client in mean / median?"
     ).pack(side="left")
 
-    include_var = tk.StringVar(value="Yes")
+    default_include = settings.load_settings().get("last_include_client", True)
+    include_var = tk.StringVar(value="Yes" if default_include else "No")
 
     include_dropdown = ttk.Combobox(
         include_frame,
