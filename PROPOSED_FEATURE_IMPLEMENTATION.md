@@ -345,7 +345,7 @@ Allow sport naming rules to be updated without editing Python source code.
 
 ### Implementation Detail
 
-Move default sport aliases into `common/sports.py`, then allow overrides from a settings file or a dedicated JSON config.
+Implemented in `common/sports.py` and `common/settings.py`. Default sport aliases live in `DEFAULT_SPORT_ALIASES`, and user overrides are loaded from the `custom_sport_aliases` setting.
 
 Example config:
 
@@ -359,7 +359,7 @@ Example config:
 }
 ```
 
-Implementation should merge user aliases with defaults. Defaults should remain available so a missing or invalid config does not break normalization.
+Implementation merges user aliases with defaults. Defaults remain available so a missing or invalid config does not break normalization. `SPORT_PATTERNS` is also built from default and configured aliases at app startup so Excel fill logic can benefit from aliases.
 
 ### Suggested Files
 
@@ -369,9 +369,9 @@ Implementation should merge user aliases with defaults. Defaults should remain a
 
 ### Acceptance Criteria
 
-- Default aliases continue to work.
-- User-defined aliases can override or extend defaults.
-- Invalid config falls back to defaults with a warning.
+- Implemented: default aliases continue to work.
+- Implemented: user-defined aliases can extend defaults through settings.
+- Implemented: invalid alias config falls back to defaults through settings validation.
 
 ## 8. Revenue/Ticket Sales Validation Report
 
@@ -381,10 +381,7 @@ Make Revenue parsing quality more visible, especially for Ticket Sales.
 
 ### Implementation Detail
 
-Revenue parsing should produce both extracted values and validation metadata. Store per-institution validation status during parsing, then write it to either:
-
-- a dedicated workbook sheet named `Validation`, or
-- a skipped/validation report file next to the output workbook.
+Implemented by having Revenue parsing produce extracted values and validation metadata. The metadata is stored on `summary.extra["revenue_validation"]` and written to a dedicated workbook sheet named `Validation` after the main Revenue sheet is filled.
 
 Validation fields:
 
@@ -397,6 +394,12 @@ Validation fields:
 
 This should build on `rev/config.py` so table labels and combination rules are not duplicated.
 
+Implemented validation statuses:
+
+- `found_value`
+- `found_zero`
+- `missing`
+
 ### Suggested Files
 
 - `rev/config.py`
@@ -406,9 +409,9 @@ This should build on `rev/config.py` so table labels and combination rules are n
 
 ### Acceptance Criteria
 
-- Ticket Sales status is visible for every institution.
-- Missing values are distinguishable from true zero values.
-- Revenue workbook output remains consistent with baseline.
+- Implemented: Ticket Sales status is visible for every institution in the `Validation` sheet.
+- Implemented: missing values are distinguishable from true zero values.
+- Implemented: main Revenue workbook output remains isolated from validation metadata.
 
 ## 9. Built-In Output Comparison Tool
 
@@ -418,7 +421,7 @@ Help developers compare baseline and refactored workbook outputs.
 
 ### Implementation Detail
 
-Add an admin/developer utility that loads two Excel workbooks and compares:
+Implemented as `scripts/compare_workbooks.py`, an admin/developer utility that loads two Excel workbooks and compares:
 
 - sheet names
 - row counts
@@ -428,7 +431,7 @@ Add an admin/developer utility that loads two Excel workbooks and compares:
 - missing institutions
 - changed sport columns
 
-This can start as a command-line script before being added to the UI. Use `openpyxl` for workbook inspection.
+This starts as a command-line script before being added to the UI. It uses `openpyxl` for workbook inspection.
 
 Suggested command:
 
@@ -443,9 +446,9 @@ python scripts/compare_workbooks.py baseline.xlsx candidate.xlsx --output compar
 
 ### Acceptance Criteria
 
-- Comparison report identifies changed sheets, formulas, and values.
-- Tool can be used without launching the Tkinter app.
-- Known identical workbooks produce a clean comparison result.
+- Implemented: comparison report identifies changed sheets, formulas, values, and dimensions.
+- Implemented: tool can be used without launching the Tkinter app.
+- Implemented: known identical workbooks produce a clean comparison result.
 
 ## 10. Settings File
 
@@ -455,7 +458,7 @@ Create a durable home for user preferences and future configurable behavior.
 
 ### Implementation Detail
 
-Create a `SettingsStore` helper with:
+Implemented a `SettingsStore` helper with:
 
 - default values
 - load
@@ -471,6 +474,7 @@ Suggested settings:
 - custom sport aliases
 - preferred output filename pattern
 - recent folders
+- log directory
 
 Keep secrets out of this file. It should contain preferences only.
 
@@ -481,9 +485,10 @@ Keep secrets out of this file. It should contain preferences only.
 
 ### Acceptance Criteria
 
-- App creates settings on first use.
-- Corrupt settings do not crash the app.
-- Settings changes persist between app launches.
+- Implemented: app creates settings on first use.
+- Implemented: corrupt settings do not crash the app.
+- Implemented: settings changes persist between app launches.
+- Implemented: settings schema version and validation are centralized.
 
 ## 11. Structured Logging
 
@@ -493,7 +498,7 @@ Make packaged desktop issues easier to diagnose.
 
 ### Implementation Detail
 
-Add a shared logging setup that writes one log file per run. Keep logging disabled or minimal by default if user-facing noise is a concern, but always log exceptions and run summaries.
+Implemented in `common/logging_config.py`. Each workflow starts a per-run log file, records run options, logs exceptions with tracebacks, and logs the final run summary.
 
 Log contents:
 
@@ -517,9 +522,9 @@ Use Python's built-in `logging` module and configure file handlers in one place.
 
 ### Acceptance Criteria
 
-- Each run can produce a log file.
-- Exceptions are logged with tracebacks.
-- Logs do not expose sensitive local data beyond paths already selected by the user.
+- Implemented: each run produces a log file in the configured log directory or default app support logs folder.
+- Implemented: UI-level workflow exceptions are logged with tracebacks.
+- Implemented: final summaries and skipped-file records are logged.
 
 ## 12. Automated Update/Version Check
 
@@ -686,13 +691,14 @@ class PdfQualityResult:
 4. Done: add settings persistence for recent folders and default save location.
 5. Done: add preview dialog using PDF manifest data.
 6. Done: add improved progress dialog and cancellation token.
-7. Next: add configurable sport aliases.
-8. Next: add Revenue/Ticket Sales validation output.
-9. Next: add workbook comparison script.
-10. Later: add structured logging using the same run summary.
-11. Later: add CLI mode.
-12. Later: add templates and update check after core reliability features are stable.
-13. Later: add PDF quality checker and feed results into preview and skipped reports.
+7. Done: add configurable sport aliases.
+8. Done: add Revenue/Ticket Sales validation output.
+9. Done: add workbook comparison script.
+10. Done: expand settings store for future configurable behavior.
+11. Done: add structured logging using the same run summary.
+12. Later: add CLI mode.
+13. Later: add templates and update check after core reliability features are stable.
+14. Later: add PDF quality checker and feed results into preview and skipped reports.
 
 ## Definition of Done
 
@@ -709,6 +715,6 @@ These proposed features are ready when:
 
 Current implementation status:
 
-- Features 1 through 6 are implemented across Scholarship, Sport Ops, Revenue, and TOE.
-- Tests cover run summaries, structured skipped reports, settings persistence, sport normalization, and PDF filename fallback behavior.
-- Features 7 through 15 remain proposed work.
+- Features 1 through 11 are implemented across the shared utilities and relevant workflows.
+- Tests cover run summaries, structured skipped reports, settings persistence, configurable sport aliases, Revenue validation sheets, structured logging, workbook comparison, sport normalization, and PDF filename fallback behavior.
+- Features 12 through 15 remain proposed work.

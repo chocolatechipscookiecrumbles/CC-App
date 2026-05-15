@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 import multiprocessing
 from programlauncher.common import settings
+from programlauncher.common.settings_dialog import open_settings_dialog
 
 def center_window(win):
     win.update_idletasks()  # ensure geometry is calculated
@@ -131,6 +132,14 @@ def create_launcher_ui():
         root,
     )
     main_frame.pack(fill="both", expand=True, padx=25, pady=30)
+
+    top_bar = ttk.Frame(main_frame)
+    top_bar.pack(fill="x")
+    ttk.Button(
+        top_bar,
+        text="Settings",
+        command=lambda: open_settings_dialog(root),
+    ).pack(side="right")
 
     # ------------------ Title ------------------
     tk.Label(

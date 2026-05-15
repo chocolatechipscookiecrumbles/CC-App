@@ -10,6 +10,7 @@ from programlauncher.common.dialogs import (
     show_summary,
 )
 from programlauncher.common.pdf_manifest import build_pdf_manifest, manifest_institution_names
+from programlauncher.common.logging_config import log_exception, start_run_log
 from programlauncher.common.progress import CancellationToken, ProcessingDialog, ProgressReporter
 from programlauncher.common.run_summary import WorkflowRunSummary
 
@@ -57,6 +58,7 @@ def run_ui(include_client):
             pdfs_found=len(manifest),
             extra={"client": client_uni, "include_client": include_client},
         )
+        start_run_log(summary)
         progress_queue = queue.Queue()
         cancel_token = CancellationToken()
         processing_dialog = ProcessingDialog(
@@ -89,6 +91,7 @@ def run_ui(include_client):
 
                     if task_store["error"]:
                         summary.finish(cancelled=cancel_token.is_cancelled)
+                        log_exception(summary, task_store["error"])
                         messagebox.showerror("Error", f"TOE processing failed:\n{task_store['error']}")
                         show_summary(summary)
                         root.quit()

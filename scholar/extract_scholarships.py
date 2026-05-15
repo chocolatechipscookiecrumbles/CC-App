@@ -1,20 +1,11 @@
 from . import *
 from programlauncher.common.pdf_manifest import build_pdf_manifest
+from programlauncher.common.sports import normalize_sport_name
 from .write_report import write_report
 
 
 def clean_sport_name(name):
-    n = name.strip().rstrip(",")  # remove stray spaces/commas
-
-    # Acrobatics variants
-    if re.fullmatch(r"Acrobatics(\s*and.*)?", n, flags=re.I):
-        return "Acrobatics and Tumbling"
-
-    # Swimming with missing Diving
-    if n.lower().startswith("swimming and"):
-        return "Swimming and Diving"
-
-    return n
+    return normalize_sport_name(name)
 
 def extract_scholarships(pdf_path):
     male_data = {}
@@ -177,29 +168,8 @@ def process_folder(
     parsed_unique_sports_f = []
 
 
-    # Parse male sports
-    for sport in unique_sports_m:
-        sport_lower = sport.lower()
-        if "track" in sport_lower:
-            parsed_unique_sports_m.append("XC/TF")
-        elif "swimming and" in sport_lower:
-            parsed_unique_sports_m.append("Swimming and Diving")
-        elif re.search(r'acrobatics\s*(?:and|&)(?:\s*tumbling)?', sport, flags=re.I) or "acrobatics" in sport:
-            parsed_unique_sports_m.append("Acrobatics and Tumbling")
-        else:
-            parsed_unique_sports_m.append(sport)
-
-    # Parse female sports
-    for sport in unique_sports_f:
-        sport_lower = sport.lower()
-        if "track" in sport_lower:
-            parsed_unique_sports_f.append("XC/TF")
-        elif "swimming and" in sport_lower:
-            parsed_unique_sports_f.append("Swimming and Diving")
-        elif re.search(r'acrobatics\s*(?:and|&)(?:\s*tumbling)?', sport, flags=re.I) or "acrobatics" in sport:
-            parsed_unique_sports_m.append("Acrobatics and Tumbling")
-        else:
-            parsed_unique_sports_f.append(sport)
+    parsed_unique_sports_m = [normalize_sport_name(sport) for sport in unique_sports_m]
+    parsed_unique_sports_f = [normalize_sport_name(sport) for sport in unique_sports_f]
 
     # Deduplicate + sort each
     parsed_unique_sports_m = sorted(set(parsed_unique_sports_m))

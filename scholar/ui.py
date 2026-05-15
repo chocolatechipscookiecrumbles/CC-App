@@ -13,6 +13,7 @@ from programlauncher.common.dialogs import (
     show_summary,
 )
 from programlauncher.common.pdf_manifest import build_pdf_manifest, manifest_institution_names
+from programlauncher.common.logging_config import log_exception, start_run_log
 from programlauncher.common.progress import CancellationToken, ProcessingDialog, ProgressReporter
 from programlauncher.common.run_summary import WorkflowRunSummary
 from programlauncher.common.sports import MENS_ONLY_SPORTS, WOMENS_ONLY_SPORTS
@@ -63,6 +64,7 @@ def run_ui(include_client):
             pdfs_found=len(manifest),
             extra={"client": client_uni, "include_client": include_client},
         )
+        start_run_log(summary)
         progress_queue = queue.Queue()
         cancel_token = CancellationToken()
         processing_dialog = ProcessingDialog(
@@ -99,6 +101,7 @@ def run_ui(include_client):
 
                     if task_store["error"]:
                         summary.finish(cancelled=cancel_token.is_cancelled)
+                        log_exception(summary, task_store["error"])
                         messagebox.showerror("Error", f"Scholarship processing failed:\n{task_store['error']}")
                         show_summary(summary)
                         root.quit()
@@ -138,7 +141,9 @@ def run_ui(include_client):
                         messagebox.showinfo("No file saved", "No file saved, exiting program.")
                         summary.finish(cancelled=True)
                         show_summary(summary)
-                        sys.exit(1)
+                        root.quit()
+                        root.destroy()
+                        return
                     reporter.update(
                         current=len(manifest),
                         total=len(manifest),
@@ -146,9 +151,18 @@ def run_ui(include_client):
                         stage="Writing workbook",
                         skipped_count=summary.skipped_count,
                     )
-                    generate_template_excel_scholar(output_excel, task_store['count']-1, male_sports, female_sports,ifclient)
-                    fill_excel_with_data_scholar(task_store['male_df'], task_store['female_df'], output_excel,
-                                                 client_uni)
+                    try:
+                        generate_template_excel_scholar(output_excel, task_store['count']-1, male_sports, female_sports,ifclient)
+                        fill_excel_with_data_scholar(task_store['male_df'], task_store['female_df'], output_excel,
+                                                     client_uni)
+                    except Exception as exc:
+                        summary.finish(output_path=output_excel, cancelled=True)
+                        log_exception(summary, exc)
+                        messagebox.showerror("Error", f"Scholarship workbook generation failed:\n{exc}")
+                        show_summary(summary)
+                        root.quit()
+                        root.destroy()
+                        return
                     summary.finish(output_path=output_excel)
                     show_summary(summary)
                     messagebox.showinfo("Done", "Excel report generated successfully.")

@@ -158,6 +158,10 @@ def confirm_preview(workflow, manifest, client_uni, include_client):
 
 
 def show_summary(summary):
+    from .logging_config import log_summary
+
+    log_summary(summary)
+
     duration = (
         f"{summary.duration_seconds:.1f} seconds"
         if summary.duration_seconds is not None
@@ -171,6 +175,7 @@ def show_summary(summary):
     reasons = "\n".join(reason_lines) if reason_lines else "- None"
 
     output = summary.output_path or "No workbook written"
+    log_path = summary.extra.get("log_path")
     message = (
         f"Status: {status}\n"
         f"Workflow: {summary.workflow}\n"
@@ -179,6 +184,7 @@ def show_summary(summary):
         f"Skipped: {summary.skipped_count}\n"
         f"Duration: {duration}\n"
         f"Output: {output}\n\n"
+        f"Log: {log_path or 'Not available'}\n\n"
         f"Skipped reasons:\n{reasons}"
     )
     messagebox.showinfo("Batch Summary", message)
