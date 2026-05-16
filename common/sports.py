@@ -50,11 +50,7 @@ BASE_SPORT_PATTERNS = {
 
 
 def get_sport_aliases() -> dict[str, list[str]]:
-    aliases = {key: list(values) for key, values in DEFAULT_SPORT_ALIASES.items()}
-    for canonical, values in settings.get_custom_sport_aliases().items():
-        aliases.setdefault(canonical, [])
-        aliases[canonical].extend(values)
-    return aliases
+    return settings.get_sport_aliases(DEFAULT_SPORT_ALIASES)
 
 
 def _build_sport_patterns() -> dict[str, re.Pattern]:
