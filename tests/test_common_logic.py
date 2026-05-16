@@ -20,6 +20,9 @@ class CommonLogicTests(unittest.TestCase):
     def test_sport_normalization_track_variant(self):
         self.assertEqual(normalize_sport_name("Track and Field, X-Country"), "XC/TF")
 
+    def test_sport_normalization_compact_track_variant(self):
+        self.assertEqual(normalize_sport_name("TrackandField"), "XC/TF")
+
     def test_sport_normalization_swimming_variant(self):
         self.assertEqual(normalize_sport_name("Swimming and"), "Swimming and Diving")
 
@@ -29,4 +32,3 @@ class CommonLogicTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

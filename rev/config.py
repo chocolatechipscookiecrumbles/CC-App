@@ -28,3 +28,13 @@ REVENUE_COMBINATIONS = {
     "16": ["13A", "19"],
 }
 
+REVENUE_COMBINATION_DESCRIPTIONS = {
+    target: f"{target} = " + " + ".join(sources)
+    for target, sources in REVENUE_COMBINATIONS.items()
+}
+
+EXPECTED_REVENUE_TABLE_IDS = list(REVENUE_TABLES.keys())
+
+
+def revenue_table_label(table_id: str) -> str:
+    return REVENUE_TABLE_LABELS.get(table_id, table_id)

@@ -1,5 +1,5 @@
 from . import *
-from programlauncher.common.sports import SPORT_PATTERNS
+from programlauncher.common.sports import SPORT_PATTERNS, normalize_sport_name
 
 black_fill = PatternFill(start_color="000000", end_color="000000", fill_type="solid")
 
@@ -83,9 +83,16 @@ def fill_excel_with_data_scholar(male_df,female_df, excel_path, client_uni, star
 
                 # Find matching column name from df using SPORT_PATTERNS
                 match_col = None
+                header_key = header.strip().lower()
+                header_pattern = SPORT_PATTERNS.get(header_key)
+                normalized_header = normalize_sport_name(header).lower()
                 for sport in df.columns:
                     sport_lower = sport.lower()
-                    if SPORT_PATTERNS[header].search(sport_lower):
+                    normalized_sport = normalize_sport_name(sport).lower()
+                    if header_pattern and header_pattern.search(sport_lower):
+                        match_col = sport
+                        break
+                    if normalized_header == normalized_sport:
                         match_col = sport
                         break
 

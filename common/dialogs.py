@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import tkinter as tk
-from tkinter import messagebox, ttk
+from tkinter import filedialog, messagebox, ttk
+
+from . import settings
 
 
 def choose_university(unis, folder_path=None):
@@ -107,3 +109,82 @@ def yes_no_popup(message="Include client in mean and median?", title="Confirmati
 
     return response
 
+
+def ask_pdf_folder(title="Select PDF Folder"):
+    initialdir = settings.get_initial_directory("last_pdf_folder")
+    kwargs = {"title": title}
+    if initialdir:
+        kwargs["initialdir"] = initialdir
+    folder_path = filedialog.askdirectory(**kwargs)
+    if folder_path:
+        settings.remember_pdf_folder(folder_path)
+    return folder_path
+
+
+def ask_output_path(title="Save Excel File"):
+    initialdir = settings.get_initial_directory("last_save_directory")
+    kwargs = {
+        "title": title,
+        "defaultextension": ".xlsx",
+        "filetypes": [("Excel Files", "*.xlsx")],
+    }
+    if initialdir:
+        kwargs["initialdir"] = initialdir
+    output_path = filedialog.asksaveasfilename(**kwargs)
+    if output_path:
+        settings.remember_save_path(output_path)
+    return output_path
+
+
+def confirm_preview(workflow, manifest, client_uni, include_client):
+    peer_count = max(len(manifest) - 1, 0)
+    preview_names = [record.institution_name for record in manifest[:12]]
+    more = len(manifest) - len(preview_names)
+    preview_lines = "\n".join(f"- {name}" for name in preview_names)
+    if more > 0:
+        preview_lines += f"\n- ...and {more} more"
+
+    include_text = "Yes" if include_client else "No"
+    message = (
+        f"Workflow: {workflow}\n"
+        f"Client: {client_uni}\n"
+        f"Include client in mean / median: {include_text}\n"
+        f"PDFs detected: {len(manifest)}\n"
+        f"Peer institutions: {peer_count}\n\n"
+        f"Detected institutions:\n{preview_lines}\n\n"
+        "Continue with report generation?"
+    )
+    return messagebox.askokcancel("Preview Report Inputs", message)
+
+
+def show_summary(summary):
+    from .logging_config import log_summary
+
+    log_summary(summary)
+
+    duration = (
+        f"{summary.duration_seconds:.1f} seconds"
+        if summary.duration_seconds is not None
+        else "Not recorded"
+    )
+    status = "Cancelled" if summary.cancelled else "Completed"
+
+    reason_lines = []
+    for reason, count in summary.reason_counts().items():
+        reason_lines.append(f"- {reason}: {count}")
+    reasons = "\n".join(reason_lines) if reason_lines else "- None"
+
+    output = summary.output_path or "No workbook written"
+    log_path = summary.extra.get("log_path")
+    message = (
+        f"Status: {status}\n"
+        f"Workflow: {summary.workflow}\n"
+        f"PDFs found: {summary.pdfs_found}\n"
+        f"Processed: {summary.processed_count}\n"
+        f"Skipped: {summary.skipped_count}\n"
+        f"Duration: {duration}\n"
+        f"Output: {output}\n\n"
+        f"Log: {log_path or 'Not available'}\n\n"
+        f"Skipped reasons:\n{reasons}"
+    )
+    messagebox.showinfo("Batch Summary", message)

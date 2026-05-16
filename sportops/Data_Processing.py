@@ -1,4 +1,9 @@
 from . import *
+from programlauncher.common.sports import (
+    MENS_ONLY_SPORTS,
+    WOMENS_ONLY_SPORTS,
+    normalize_sport_name,
+)
 
 def extract_unique_sports_from_rows(data_dict, column_name="category", use_index=False, exclude_words=None):
     """
@@ -40,43 +45,10 @@ def extract_unique_sports_from_rows(data_dict, column_name="category", use_index
 
     return sorted(unique_sports)
 
-def normalize_sport_name(name):
-    """
-    Normalizes a single sport name:
-      - collapses whitespace
-      - converts '&' to 'and'
-      - strips trailing stray punctuation (hyphens, apostrophes, commas, etc.)
-      - removes parenthetical gender markers like "(W)" or "(M)"
-      - canonicalizes Track and Field X- variants to 'XCTF'
-      - title-cases the remainder
-    """
-    s = name.strip()
-    s = re.sub(r'\s+', ' ', s)           # collapse whitespace
-    s = s.replace('&', 'and')            # unify ampersand
-    s = re.sub(r'\s*\(.*?\)\s*$', '', s) # drop trailing parentheticals e.g. (W)
-    s = re.sub(r"[-'\".,;:]+$", "", s)   # drop trailing punctuation like - ' ,
-    s = s.strip()
-
-    # Detect Track & Field X variants (flexible about spaces and comma)
-    if re.search(r"track\s*(?:and|&)\s*field\s*,?\s*x", s, flags=re.I):
-        return "XC/TF"
-
-    # Add any other normalizations here (e.g., unify soccer gender variants)
-    # Example: unify soccer
-    if re.search(r'\bsoccer\b', s, flags=re.I):
-        return "Soccer"
-
-    if re.search(r'acrobatics\s*(?:and|&)\s*tumbling\s*,?\s*x', s, flags=re.I):
-        return "Acrobatics and Tumbling"
-
-    # Fallback: title-case the cleaned string
-    return s.title()
-
-
 def generate_ws_names(sports_list):
     expanded_list = []
-    mens_only = ['Football', 'Baseball',"Rifle"]
-    womens_only = ["Softball", "Beach Volleyball", "Field Hockey", "Bowling", "Equestrian", "Rugby"]
+    mens_only = MENS_ONLY_SPORTS
+    womens_only = WOMENS_ONLY_SPORTS
     #coed = ["rifle"]
 
     for sport in sports_list:
@@ -96,13 +68,12 @@ def build_gender_sport_summaries(df_dict, client_uni=None, mens_only=None, women
     Builds male/female sport summary DataFrames, but only includes sports where
     the given client university actually has at least one nonzero value.
     """
-    if mens_only is None:
-        mens_only = ['Football', 'Baseball',  'Crew']  # any coed sport goes to men's
-    if womens_only is None:
-        womens_only = ["Softball", "Beach Volleyball", "Field Hockey", "Bowling", "Equestrian", "Rugby",'Rifle']
-
     if not df_dict:
         return pd.DataFrame(), pd.DataFrame()
+    if mens_only is None:
+        mens_only = MENS_ONLY_SPORTS
+    if womens_only is None:
+        womens_only = WOMENS_ONLY_SPORTS
 
     # collect all universities that appear in any of the sport dataframes
     all_universities = sorted({uni for df in df_dict.values() for uni in df.index})

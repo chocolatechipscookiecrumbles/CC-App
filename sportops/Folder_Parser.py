@@ -5,7 +5,13 @@ from .config import SPORTOPS_TABLE_NUMS
 from .Table_Extractor import extract_tables_by_title
 from .write_report import write_report
 
-def collect_sports_across_pdfs(folder_path, manifest=None):
+def collect_sports_across_pdfs(
+    folder_path,
+    manifest=None,
+    summary=None,
+    progress_reporter=None,
+    cancel_token=None,
+):
     """
     Parse all PDFs in a folder using extract_tables_by_title and aggregate results.
 
@@ -32,14 +38,41 @@ def collect_sports_across_pdfs(folder_path, manifest=None):
             sport_dfs[sport_key] = pd.DataFrame(columns=table_nums)
     records = manifest if manifest is not None else build_pdf_manifest(folder_path)
 
-    for record in records:
+    total = len(records)
+
+    for index, record in enumerate(records, start=1):
+        if cancel_token and cancel_token.is_cancelled:
+            if summary:
+                summary.cancelled = True
+            break
+
         filename = record.filename
         institution_name = record.institution_name
         pdf_path = record.path
+        if progress_reporter:
+            progress_reporter.update(
+                current=index,
+                total=total,
+                institution=institution_name,
+                stage="Extracting sport tables",
+                skipped_count=summary.skipped_count if summary else len(skipped_list),
+            )
         tables = extract_tables_by_title(pdf_path)
         if tables == 1:
-            skipped_list.append(filename)
+            if summary:
+                summary.add_skipped(
+                    filename,
+                    path=pdf_path,
+                    institution_name=institution_name,
+                    reason="table_not_found",
+                    stage="table_extraction",
+                )
+            else:
+                skipped_list.append(filename)
             continue
+
+        if summary:
+            summary.add_processed()
 
         for table_title, df in tables.items():
             #print(table_title,df)
@@ -95,5 +128,5 @@ def collect_sports_across_pdfs(folder_path, manifest=None):
     # sort rows and columns for readability
     for sport in sport_dfs:
         sport_dfs[sport] = sport_dfs[sport].sort_index().sort_index(axis=1)
-    write_report(folder_path,skipped_list)
+    write_report(folder_path, summary.skipped_files if summary else skipped_list)
     return sport_dfs, mens_list, womens_list

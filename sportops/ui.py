@@ -1,4 +1,5 @@
 from . import *
+import queue
 
 from .Excel_Generator import (
     build_totalsports_sheet,
@@ -10,7 +11,16 @@ from .fill_excel_with_data_sportops import fill_excel_with_data_sportops
 from .choose_uni import choose_university
 from .checklist import generate_checklist
 #from .include_client import yes_no_popup
+from programlauncher.common.dialogs import (
+    ask_output_path,
+    ask_pdf_folder,
+    confirm_preview,
+    show_summary,
+)
 from programlauncher.common.pdf_manifest import build_pdf_manifest, manifest_institution_names
+from programlauncher.common.logging_config import log_exception, start_run_log
+from programlauncher.common.progress import CancellationToken, ProcessingDialog, ProgressReporter
+from programlauncher.common.run_summary import WorkflowRunSummary
 
 def ttk_on_close():
     """Handle window close event."""
@@ -23,7 +33,7 @@ def run_ui(include_client):
 
     # Choose folder path
     messagebox.showinfo("Select Folder", "Choose the folder containing NCAA FRS PDFs.")
-    folder_path = filedialog.askdirectory(title="Select PDF Folder")
+    folder_path = ask_pdf_folder(title="Select PDF Folder")
     if not folder_path:
         messagebox.showinfo("No folder selected", "No sample folder path, exiting program.")
         sys.exit(1)
@@ -43,46 +53,75 @@ def run_ui(include_client):
         messagebox.showinfo("No uni saved", "No uni saved, exiting program.")
         sys.exit(1)
 
+    if not confirm_preview("Sport Ops", manifest, client_uni, include_client):
+        messagebox.showinfo("Cancelled", "Report generation cancelled.")
+        sys.exit(0)
+
     def proceed():
-        #setup processing win
-        processing_win = tk.Toplevel(root)
-        processing_win.title("")
-        processing_win.geometry("300x120")
-        processing_win.resizable(False, False)
-        processing_win.attributes("-topmost", True)
-        processing_win.grab_set()
-
-        processing_win.update_idletasks()
-        x = (processing_win.winfo_screenwidth() // 2) - 150
-        y = (processing_win.winfo_screenheight() // 2) - 60
-        processing_win.geometry(f"+{x}+{y}")
-
-        label = tk.Label(processing_win, text="Processing...", font=("Helvetica", 13))
-        label.pack(pady=10)
-
-        progress = ttk.Progressbar(processing_win, mode="indeterminate")
-        progress.pack(fill="x", padx=20, pady=10)
-        progress.start(10)
-        processing_win.protocol("WM_DELETE_WINDOW", lambda: None)
+        summary = WorkflowRunSummary(
+            "Sport Ops",
+            folder_path,
+            pdfs_found=len(manifest),
+            extra={"client": client_uni, "include_client": include_client},
+        )
+        start_run_log(summary)
+        progress_queue = queue.Queue()
+        cancel_token = CancellationToken()
+        processing_dialog = ProcessingDialog(
+            root,
+            "Processing Sport Ops",
+            progress_queue,
+            cancel_token,
+        )
+        reporter = ProgressReporter(progress_queue.put)
+        task_store["error"] = None
 
         def task():
             try:
-                sport_dfs, men_sports, women_sports = collect_sports_across_pdfs(folder_path, manifest=manifest)
+                sport_dfs, men_sports, women_sports = collect_sports_across_pdfs(
+                    folder_path,
+                    manifest=manifest,
+                    summary=summary,
+                    progress_reporter=reporter,
+                    cancel_token=cancel_token,
+                )
+                task_store.update({
+                    "sport_dfs": sport_dfs,
+                    "men_sports": men_sports,
+                    "women_sports": women_sports,
+                })
                 #print(men_sports, women_sports)
 
+            except Exception as exc:
+                task_store["error"] = exc
             finally:
                 def finalize():
-                    progress.stop()
-                    processing_win.destroy()
+                    processing_dialog.destroy()
 
-                    male_sports = generate_checklist("Male Sports", men_sports)
+                    if task_store["error"]:
+                        summary.finish(cancelled=cancel_token.is_cancelled)
+                        log_exception(summary, task_store["error"])
+                        messagebox.showerror("Error", f"Sport Ops processing failed:\n{task_store['error']}")
+                        show_summary(summary)
+                        root.quit()
+                        root.destroy()
+                        return
+
+                    if cancel_token.is_cancelled or summary.cancelled:
+                        summary.finish(cancelled=True)
+                        show_summary(summary)
+                        root.quit()
+                        root.destroy()
+                        return
+
+                    male_sports = generate_checklist("Male Sports", task_store["men_sports"])
                     if male_sports == 1:
                         messagebox.showerror("Error", "Nothing selected, exiting program.")
                         sys.exit(1)
 
                     # Show Female checklist, wait until user confirms
                     #female_sports = [s for s in task_store["sportsf"] if s not in mens_only]
-                    female_sports = generate_checklist("Female Sports", women_sports)
+                    female_sports = generate_checklist("Female Sports", task_store["women_sports"])
 
                     if female_sports == 1:
                         messagebox.showerror("Error", "Nothing selected, exiting program.")
@@ -94,19 +133,26 @@ def run_ui(include_client):
 
                     # Proceed to save file
                     messagebox.showinfo("Save File", "Choose where to save the Excel report.")
-                    output_excel = filedialog.asksaveasfilename(
-                        title="Save Excel File",
-                        defaultextension=".xlsx",
-                        filetypes=[("Excel Files", "*.xlsx")]
-                    )
+                    output_excel = ask_output_path(title="Save Excel File")
                     if not output_excel:
                         messagebox.showinfo("No file saved", "No file saved, exiting program.")
+                        summary.finish(cancelled=True)
+                        show_summary(summary)
                         sys.exit(1)
+                    reporter.update(
+                        current=len(manifest),
+                        total=len(manifest),
+                        institution=client_uni,
+                        stage="Writing workbook",
+                        skipped_count=summary.skipped_count,
+                    )
                     generate_template_excel_totalsports(output_excel)
                     #generate_template_excel_scholar(output_excel, task_store['count']-1, male_sports, female_sports)
                     '''fill_excel_with_data_scholar(task_store['male_df'], task_store['female_df'], output_excel,
                                                  client_uni)'''
-                    fill_excel_with_data_sportops(sport_dfs, output_excel, client_uni, male_sports, female_sports,ifclient)
+                    fill_excel_with_data_sportops(task_store["sport_dfs"], output_excel, client_uni, male_sports, female_sports,ifclient)
+                    summary.finish(output_path=output_excel)
+                    show_summary(summary)
                     messagebox.showinfo("Done", "Excel report generated successfully.")
 
                     root.quit()
