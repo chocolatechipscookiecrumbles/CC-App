@@ -1,4 +1,5 @@
 from . import *
+from .config import SPORTOPS_TABLE_NUMS, sportops_table_labels
 
 
 bold_font = Font(bold=True)
@@ -156,25 +157,12 @@ def build_total_sports_total_sheet(ws, title, sports, num_items, ifclient):
         set_border(ws[f"{get_column_letter(col)}{rank_row}"], bottom=Side(style="medium", color="000000"))
 
 
-def build_totalsports_sheet(ws, title, num_items,ifclient):
+def build_totalsports_sheet(ws, title, num_items,ifclient, table_labels=None):
     """
     Build a single sheet with headers, formulas, and formatting.
     """
     # --- Styles ---
-    metrics = [
-    "Guarantees",
-    "Recruiting",
-    "Travel",
-    "Equipment",
-    "Game",
-    "Fundraising/Marketing",
-    "Admin",
-    "Indirect Institutional Support",
-    "Medical",
-    "Membership",
-    "S-A Meals",
-    "Other"
-]
+    metrics = table_labels or sportops_table_labels(SPORTOPS_TABLE_NUMS)
 
     # --- Data Section ---
     start_row = 5

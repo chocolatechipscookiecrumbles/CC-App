@@ -1,9 +1,6 @@
 from __future__ import annotations
 from . import *
-from .config import SPORTOPS_TABLE_NAMES
-
-
-table_names = SPORTOPS_TABLE_NAMES
+from .config import SPORTOPS_TABLE_NUMS, clean_sportops_table_ids
 
 
 # flexible regexes
@@ -158,11 +155,18 @@ def _parse_table_lines(lines, start_idx, max_lines_parsed=100):
     found_df = pd.DataFrame(parsed_norm, columns=cols)
     return found_df.fillna(0)
 
-def extract_tables_by_title(pdf_path, lookahead_lines=20, header_phrase=HEADER_WORDS):
+def extract_tables_by_title(
+    pdf_path,
+    lookahead_lines=20,
+    header_phrase=HEADER_WORDS,
+    table_ids=None,
+    table_map=None,
+):
     """
     Return dict mapping title_key ("21 Guarantees") -> pandas.DataFrame for the nearest table below that title.
     """
     results = {}
+    target_table_ids = set(clean_sportops_table_ids(table_ids or SPORTOPS_TABLE_NUMS, table_map))
     HEADER_WORDS = "Expenses by Object of Expenditure"
     header_squished = _squish(HEADER_WORDS)
 
@@ -198,7 +202,7 @@ def extract_tables_by_title(pdf_path, lookahead_lines=20, header_phrase=HEADER_W
                 #print(title_num, title_text)
                 title_key = f"{title_num} {title_text}"
 
-                if not any(title_num.startswith(name.split()[0]) for name in table_names):
+                if title_num not in target_table_ids:
                     #print(title_num)
                     continue
 

@@ -239,6 +239,14 @@ The Sport Aliases tab:
 - Lets users select a row and delete it with a warning.
 - Saves changes without closing the Settings window.
 
+The SportOps Tables tab:
+
+- Lists the NCAA SportOps expense tables in an editable table number/table name grid.
+- Lets users uncheck built-in rows to exclude them from parsing and output without deleting the default backup.
+- Lets users add, edit, and delete custom table rows.
+- Includes Reset to Defaults, which restores the original built-in SportOps table list.
+- Falls back to the full default table set when saved settings are missing, invalid, or empty.
+
 The Logs tab:
 
 - Shows the resolved logs folder.
@@ -413,20 +421,7 @@ The sport operating budget workflow targets NCAA table numbers:
 - `39` Student-Athlete Meals
 - `40` Other Operating Expenses
 
-These become the report metrics:
-
-- Guarantees
-- Recruiting
-- Travel
-- Equipment
-- Game
-- Fundraising/Marketing
-- Admin
-- Indirect Institutional Support
-- Medical
-- Membership
-- S-A Meals
-- Other
+These table numbers and names are centralized in `sportops/config.py` as `SPORTOPS_TABLES`. The Settings window can edit the active table labels, add custom table rows, and limit SportOps extraction/output to checked table IDs. The built-in list remains the reset/default backup and can be deselected but not deleted.
 
 ### Table Extraction Method
 
@@ -508,7 +503,7 @@ This is one of the more advanced techniques in the project because it uses an al
 
 ### Folder Aggregation
 
-`collect_sports_across_pdfs(folder_path, manifest=...)` loops over manifest records and builds a dictionary of DataFrames.
+`collect_sports_across_pdfs(folder_path, manifest=...)` loops over manifest records and builds a dictionary of DataFrames. It uses the configured SportOps table dictionary and checked table IDs from Settings, then falls back to all default tables when saved settings are missing or invalid.
 
 Returned structure:
 
@@ -536,7 +531,7 @@ Unread PDFs are written to a timestamped skipped-file CSV.
 `build_totalsports_sheet(...)` creates a sport-specific operating budget sheet with:
 
 - Institution column
-- Expense category columns
+- Configured SportOps expense category columns
 - Total operating expenses column
 - Client row
 - Average, median, and rank rows
@@ -556,6 +551,7 @@ These sheets summarize total sport operating budgets across selected sports.
 `fill_excel_with_data_sportops(...)`:
 
 - Filters extracted sports against the user's checklist selections.
+- Filters expense category columns against the configured SportOps table selection.
 - Creates one worksheet per included sport.
 - Writes the client row separately.
 - Writes comparison schools below the client row.

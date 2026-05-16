@@ -1,7 +1,8 @@
 from . import *
+from programlauncher.common import settings
 from programlauncher.common.pdf_manifest import build_pdf_manifest
 from programlauncher.common.sports import MENS_ONLY_SPORTS, WOMENS_ONLY_SPORTS
-from .config import SPORTOPS_TABLE_NUMS
+from .config import SPORTOPS_TABLES, clean_sportops_table_ids
 from .Table_Extractor import extract_tables_by_title
 from .write_report import write_report
 
@@ -11,6 +12,7 @@ def collect_sports_across_pdfs(
     summary=None,
     progress_reporter=None,
     cancel_token=None,
+    table_ids=None,
 ):
     """
     Parse all PDFs in a folder using extract_tables_by_title and aggregate results.
@@ -27,7 +29,9 @@ def collect_sports_across_pdfs(
     sport_dfs = {}  # sport_name -> pd.DataFrame
     mens_only = MENS_ONLY_SPORTS
     womens_only = WOMENS_ONLY_SPORTS
-    table_nums = SPORTOPS_TABLE_NUMS
+    table_map = settings.get_sportops_tables(SPORTOPS_TABLES)
+    selected_table_ids = table_ids or settings.get_sportops_output_tables(list(table_map))
+    table_nums = clean_sportops_table_ids(selected_table_ids, table_map)
     mens_list = set()
     womens_list = set()
     skipped_list = []
@@ -57,7 +61,7 @@ def collect_sports_across_pdfs(
                 stage="Extracting sport tables",
                 skipped_count=summary.skipped_count if summary else len(skipped_list),
             )
-        tables = extract_tables_by_title(pdf_path)
+        tables = extract_tables_by_title(pdf_path, table_ids=table_nums, table_map=table_map)
         if tables == 1:
             if summary:
                 summary.add_skipped(
@@ -75,6 +79,8 @@ def collect_sports_across_pdfs(
             summary.add_processed()
 
         for table_title, df in tables.items():
+            if table_title not in table_nums:
+                continue
             #print(table_title,df)
             # normalize columns
             #df = df.rename(columns=lambda c: c.strip().lower())
@@ -127,6 +133,6 @@ def collect_sports_across_pdfs(
 
     # sort rows and columns for readability
     for sport in sport_dfs:
-        sport_dfs[sport] = sport_dfs[sport].sort_index().sort_index(axis=1)
+        sport_dfs[sport] = sport_dfs[sport].reindex(columns=table_nums).sort_index()
     write_report(folder_path, summary.skipped_files if summary else skipped_list)
     return sport_dfs, mens_list, womens_list

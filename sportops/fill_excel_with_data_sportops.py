@@ -1,5 +1,7 @@
 from . import *
+from programlauncher.common import settings
 from programlauncher.common.sports import SPORT_PATTERNS
+from .config import SPORTOPS_TABLES, clean_sportops_table_ids, sportops_table_labels
 
 black_fill = PatternFill(start_color="000000", end_color="000000", fill_type="solid")
 
@@ -38,13 +40,26 @@ def safe_write(ws, cell_ref, value):
     else:
         write_and_fill(cell, value)
 
-def fill_excel_with_data_sportops(df_dict, excel_path, client_uni, menslist , womenslist, ifclient,start_cell="B5"):
+def fill_excel_with_data_sportops(
+    df_dict,
+    excel_path,
+    client_uni,
+    menslist,
+    womenslist,
+    ifclient,
+    start_cell="B5",
+    table_ids=None,
+):
     """
     Fills the generated Excel template with extracted data.
     """
     wb = load_workbook(excel_path)
     start_col = re.sub(r"\d+", "", start_cell)  # "B"
     start_row = int(re.sub(r"[A-Za-z]+", "", start_cell))  # 5
+    table_map = settings.get_sportops_tables(SPORTOPS_TABLES)
+    selected_ids = table_ids or settings.get_sportops_output_tables(list(table_map))
+    selected_table_ids = clean_sportops_table_ids(selected_ids, table_map)
+    selected_table_labels = sportops_table_labels(selected_table_ids, table_map)
 
     def normalize(s: str) -> str:
         # Lowercase + remove spaces + remove apostrophes only
@@ -60,15 +75,27 @@ def fill_excel_with_data_sportops(df_dict, excel_path, client_uni, menslist , wo
     for sport, df in df_dict.items():
         sport_clean = normalize(sport)
         if sport_clean in all_sports_norm:
-            filtered_dict[sport] = df
+            filtered_dict[sport] = df.reindex(columns=selected_table_ids)
 
     for sport, df in filtered_dict.items():
         ws = wb.create_sheet(title=safe_sheet_title(sport))
         num = len(df)
         if client_uni in df.index:
-            build_totalsports_sheet(ws,f"CONFERENCE - {sport} Sport Operating Budgets",num-1,ifclient)
+            build_totalsports_sheet(
+                ws,
+                f"CONFERENCE - {sport} Sport Operating Budgets",
+                num - 1,
+                ifclient,
+                table_labels=selected_table_labels,
+            )
         else:
-            build_totalsports_sheet(ws, f"CONFERENCE - {sport} Sport Operating Budgets", num,ifclient)
+            build_totalsports_sheet(
+                ws,
+                f"CONFERENCE - {sport} Sport Operating Budgets",
+                num,
+                ifclient,
+                table_labels=selected_table_labels,
+            )
         ws[f"{start_col}4"] = client_uni
         try:
             row = df.loc[[client_uni]]
@@ -77,7 +104,7 @@ def fill_excel_with_data_sportops(df_dict, excel_path, client_uni, menslist , wo
 
             row_values = row.values.tolist()[0]  # flatten to 1D list
             for i, value in enumerate(row_values):
-                col_letter = chr(ord('C') + i)  # start at column C
+                col_letter = get_column_letter(column_index_from_string(start_col) + 1 + i)
                 #print(repr(value), type(value))
                 safe_write(ws, f"{col_letter}4", value)
                 #ws[f"{col_letter}4"] = value
@@ -90,7 +117,7 @@ def fill_excel_with_data_sportops(df_dict, excel_path, client_uni, menslist , wo
 
             # Safely write row values starting from column C
             for i, value in enumerate(row_values):
-                col_letter = chr(ord('C') + i)  # start at column C
+                col_letter = get_column_letter(column_index_from_string(start_col) + 1 + i)
                 safe_write(ws, f"{col_letter}4", value)
             print(f"Error: {client_uni} not found in the DataFrame")
 

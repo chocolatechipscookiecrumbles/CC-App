@@ -472,6 +472,7 @@ Suggested settings:
 - default save folder
 - verbose logging enabled or disabled
 - sport alias table
+- SportOps table dictionary and checked output table IDs
 - preferred output filename pattern
 - recent folders
 - log directory
@@ -716,5 +717,5 @@ These proposed features are ready when:
 Current implementation status:
 
 - Features 1 through 11 are implemented across the shared utilities and relevant workflows.
-- Tests cover run summaries, structured skipped reports, settings persistence, configurable sport aliases, Revenue validation sheets, structured logging, workbook comparison, sport normalization, and PDF filename fallback behavior.
+- Tests cover run summaries, structured skipped reports, settings persistence, configurable sport aliases, SportOps table defaults/selection, Revenue validation sheets, structured logging, workbook comparison, sport normalization, and PDF filename fallback behavior.
 - Features 12 through 15 remain proposed work.

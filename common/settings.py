@@ -23,6 +23,8 @@ DEFAULT_SETTINGS = {
     "preferred_output_filename_pattern": "{workflow}_{client}_{date}.xlsx",
     "custom_sport_aliases": {},
     "sport_aliases": None,
+    "sportops_tables": None,
+    "sportops_output_tables": None,
     "log_directory": "",
 }
 
@@ -126,6 +128,37 @@ def _merge_alias_mappings(*mappings: dict[str, list[str]]) -> dict[str, list[str
     return merged
 
 
+def _clean_string_list(value: Any) -> list[str] | None:
+    if isinstance(value, str):
+        value = [value]
+    if not isinstance(value, list):
+        return None
+
+    cleaned = []
+    seen = set()
+    for item in value:
+        text = str(item).strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        cleaned.append(text)
+    return cleaned
+
+
+def _clean_string_mapping(value: Any) -> dict[str, str] | None:
+    if not isinstance(value, dict):
+        return None
+
+    cleaned = {}
+    for key, label in value.items():
+        key = str(key).strip()
+        label = str(label).strip()
+        if not key or not label or key in cleaned:
+            continue
+        cleaned[key] = label
+    return cleaned
+
+
 def _validate_settings(data: Any) -> dict[str, Any]:
     settings = DEFAULT_SETTINGS.copy()
     if isinstance(data, dict):
@@ -150,6 +183,8 @@ def _validate_settings(data: Any) -> dict[str, Any]:
     settings["custom_sport_aliases"] = _clean_alias_mapping(settings.get("custom_sport_aliases", {}))
     sport_aliases = settings.get("sport_aliases")
     settings["sport_aliases"] = _clean_alias_mapping(sport_aliases) if isinstance(sport_aliases, dict) else None
+    settings["sportops_tables"] = _clean_string_mapping(settings.get("sportops_tables"))
+    settings["sportops_output_tables"] = _clean_string_list(settings.get("sportops_output_tables"))
     return settings
 
 
@@ -213,4 +248,57 @@ def get_sport_aliases(default_aliases: dict[str, list[str]]) -> dict[str, list[s
 def save_sport_aliases(alias_mapping: dict[str, list[str]]) -> None:
     next_settings = load_settings()
     next_settings["sport_aliases"] = _clean_alias_mapping(alias_mapping)
+    save_settings(next_settings)
+
+
+def clean_sportops_output_tables(value: Any, default_table_ids: list[str]) -> list[str]:
+    default_ids = [str(table_id) for table_id in default_table_ids]
+    raw_ids = _clean_string_list(value)
+    if raw_ids is None:
+        return default_ids
+
+    allowed = set(default_ids)
+    selected = [table_id for table_id in raw_ids if table_id in allowed]
+    return selected or default_ids
+
+
+def clean_sportops_tables(value: Any, default_tables: dict[str, str]) -> dict[str, str]:
+    cleaned = _clean_string_mapping(value)
+    return cleaned or {str(key): str(label) for key, label in default_tables.items()}
+
+
+def get_sportops_tables(default_tables: dict[str, str]) -> dict[str, str]:
+    return clean_sportops_tables(load_settings().get("sportops_tables"), default_tables)
+
+
+def save_sportops_tables(table_map: dict[str, str], default_tables: dict[str, str]) -> None:
+    next_settings = load_settings()
+    next_settings["sportops_tables"] = clean_sportops_tables(table_map, default_tables)
+    next_settings["sportops_output_tables"] = list(next_settings["sportops_tables"])
+    save_settings(next_settings)
+
+
+def get_sportops_output_tables(default_table_ids: list[str]) -> list[str]:
+    return clean_sportops_output_tables(
+        load_settings().get("sportops_output_tables"),
+        default_table_ids,
+    )
+
+
+def save_sportops_output_tables(table_ids: list[str], default_table_ids: list[str]) -> None:
+    next_settings = load_settings()
+    next_settings["sportops_output_tables"] = clean_sportops_output_tables(table_ids, default_table_ids)
+    save_settings(next_settings)
+
+
+def reset_sportops_output_tables(default_table_ids: list[str]) -> None:
+    next_settings = load_settings()
+    next_settings["sportops_output_tables"] = [str(table_id) for table_id in default_table_ids]
+    save_settings(next_settings)
+
+
+def reset_sportops_tables(default_tables: dict[str, str]) -> None:
+    next_settings = load_settings()
+    next_settings["sportops_tables"] = {str(key): str(label) for key, label in default_tables.items()}
+    next_settings["sportops_output_tables"] = list(next_settings["sportops_tables"])
     save_settings(next_settings)

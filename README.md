@@ -97,11 +97,14 @@ On Windows, settings are stored under the user app data folder.
 The settings page uses tabs:
 
 - **Sport Aliases**: edit the system-wide sport normalization table, add alias groups, and delete selected rows with confirmation.
+- **SportOps Tables**: edit the SportOps table number/name list and choose which rows are parsed and included in final SportOps workbooks.
 - **Logs**: view the resolved logs folder, set a custom log folder, reset to the default log folder, and copy the logs path.
 
 Sport aliases are comma-separated PDF phrases that normalize to a target sport name. For example, `TrackandField` and `Track and Field` can both normalize to `XC/TF`.
 
 The default aliases appear as regular editable rows beside any rows you add. Adding, editing, or deleting rows updates the table immediately. Click **Save** to persist changes; the Settings window stays open so you can continue editing.
+
+SportOps table choices default to the full NCAA table set used by the app. The built-in rows can be unchecked when you want to exclude them from output, but they cannot be deleted. Added rows can be edited or deleted, and **Reset to Defaults** restores the original built-in list. If the saved table settings are missing, invalid, or empty, the app falls back to the default SportOps table set.
 
 ## Logs And Skipped Reports
 

@@ -1,6 +1,7 @@
 import csv
 
 from openpyxl import Workbook, load_workbook
+import pandas as pd
 import pytest
 
 from programlauncher.common.logging_config import log_summary, start_run_log
@@ -9,7 +10,9 @@ from programlauncher.common.run_summary import SkippedFileRecord, WorkflowRunSum
 from programlauncher.common import settings, sports
 from programlauncher.common.settings_dialog import (
     AliasRowState,
+    SportOpsTableRowState,
     collect_alias_settings,
+    collect_sportops_table_settings,
     dedupe_aliases,
     format_aliases,
     parse_alias_text,
@@ -169,6 +172,134 @@ def test_default_and_reset_log_directory(tmp_path, monkeypatch):
 
     settings.reset_log_directory()
     assert settings.logs_dir() == tmp_path / "logs"
+
+
+def test_sportops_output_table_settings_fallback_and_reset(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "_settings_dir", lambda: tmp_path)
+    default_ids = ["21", "27", "30"]
+
+    assert settings.get_sportops_output_tables(default_ids) == default_ids
+
+    settings.update_setting("sportops_output_tables", ["27", "999", "27"])
+    assert settings.get_sportops_output_tables(default_ids) == ["27"]
+
+    settings.update_setting("sportops_output_tables", [])
+    assert settings.get_sportops_output_tables(default_ids) == default_ids
+
+    settings.update_setting("sportops_output_tables", ["30"])
+    settings.reset_sportops_output_tables(default_ids)
+    assert settings.get_sportops_output_tables(default_ids) == default_ids
+
+
+def test_sportops_table_settings_collect_enabled_and_protected_rows():
+    class Var:
+        def __init__(self, value):
+            self.value = value
+
+        def get(self):
+            return self.value
+
+    rows = [
+        SportOpsTableRowState(Var("21"), Var("Guarantees"), Var(False), is_default=True),
+        SportOpsTableRowState(Var("30"), Var("Game Expenses"), Var(True), is_default=True),
+        SportOpsTableRowState(Var("50"), Var("Custom Table"), Var(True)),
+    ]
+
+    table_map, selected_ids = collect_sportops_table_settings(rows)
+
+    assert table_map == {
+        "21": "Guarantees",
+        "30": "Game Expenses",
+        "50": "Custom Table",
+    }
+    assert selected_ids == ["30", "50"]
+
+    rows[-1].deleted = True
+    table_map, selected_ids = collect_sportops_table_settings(rows)
+    assert "50" not in table_map
+    assert selected_ids == ["30"]
+
+
+def test_sportops_table_settings_clean_empty_and_duplicate_rows():
+    class Var:
+        def __init__(self, value):
+            self.value = value
+
+        def get(self):
+            return self.value
+
+    rows = [
+        SportOpsTableRowState(Var("21"), Var("Guarantees"), Var(True), is_default=True),
+        SportOpsTableRowState(Var(""), Var("Ignored"), Var(True)),
+        SportOpsTableRowState(Var("21"), Var("Duplicate"), Var(True)),
+        SportOpsTableRowState(Var("88"), Var(""), Var(True)),
+    ]
+
+    table_map, selected_ids = collect_sportops_table_settings(rows)
+
+    assert table_map == {"21": "Guarantees"}
+    assert selected_ids == ["21"]
+
+
+def test_sportops_table_dictionary_generates_legacy_lists():
+    pytest.importorskip("pdfplumber")
+    from programlauncher.sportops.config import SPORTOPS_TABLES, sportops_table_names
+
+    assert SPORTOPS_TABLES["21"] == "Guarantees"
+    assert sportops_table_names(["21", "30"]) == ["21 Guarantees", "30 Game Expenses"]
+
+
+def test_sportops_workbook_headers_follow_selected_tables():
+    pytest.importorskip("pdfplumber")
+    from programlauncher.sportops.Excel_Generator import build_totalsports_sheet
+    from programlauncher.sportops.config import sportops_table_labels
+
+    wb = Workbook()
+    ws = wb.active
+    build_totalsports_sheet(
+        ws,
+        "CONFERENCE - Soccer Sport Operating Budgets",
+        1,
+        True,
+        table_labels=sportops_table_labels(["21", "30"]),
+    )
+
+    assert ws["C3"].value == "Guarantees"
+    assert ws["D3"].value == "Game Expenses"
+    assert ws["E3"].value == "Total Operating Expenses"
+    assert ws["E4"].value == "=SUM(C4:D4)"
+
+
+def test_sportops_fill_filters_to_selected_tables(tmp_path):
+    pytest.importorskip("pdfplumber")
+    from programlauncher.sportops.Excel_Generator import generate_template_excel_totalsports
+    from programlauncher.sportops.fill_excel_with_data_sportops import fill_excel_with_data_sportops
+
+    workbook_path = tmp_path / "sportops.xlsx"
+    generate_template_excel_totalsports(workbook_path)
+    df = pd.DataFrame(
+        {"21": [100, 10], "30": [200, 20], "40": [999, 99]},
+        index=["Client University", "Peer University"],
+    )
+
+    fill_excel_with_data_sportops(
+        {"Men's Soccer": df},
+        workbook_path,
+        "Client University",
+        ["Men's Soccer"],
+        [],
+        True,
+        table_ids=["21", "30"],
+    )
+
+    loaded = load_workbook(workbook_path, data_only=False)
+    ws = loaded["Men's Soccer"]
+    assert ws["C3"].value == "Guarantees"
+    assert ws["D3"].value == "Game Expenses"
+    assert ws["E3"].value == "Total Operating Expenses"
+    assert ws["C4"].value == 100
+    assert ws["D4"].value == 200
+    assert ws["E4"].value == "=SUM(C4:D4)"
 
 
 def test_revenue_validation_sheet_marks_ticket_sales_status(tmp_path):
