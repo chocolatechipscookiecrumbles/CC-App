@@ -345,13 +345,13 @@ Allow sport naming rules to be updated without editing Python source code.
 
 ### Implementation Detail
 
-Implemented in `common/sports.py` and `common/settings.py`. Default sport aliases live in `DEFAULT_SPORT_ALIASES`, and user overrides are loaded from the `custom_sport_aliases` setting.
+Implemented in `common/sports.py`, `common/settings.py`, and `common/settings_dialog.py`. Default sport aliases live in `DEFAULT_SPORT_ALIASES` and seed the editable Settings table when no saved table exists. After the table is saved, the `sport_aliases` setting becomes the authoritative source for normalization.
 
 Example config:
 
 ```json
 {
-  "aliases": {
+  "sport_aliases": {
     "XC/TF": ["Track and Field", "Track and Field, X-Country"],
     "Swimming and Diving": ["Swimming and", "Swimming & Diving"],
     "Acrobatics and Tumbling": ["Acrobatics & Tumbling"]
@@ -359,13 +359,13 @@ Example config:
 }
 ```
 
-Implementation merges user aliases with defaults. Defaults remain available so a missing or invalid config does not break normalization. `SPORT_PATTERNS` is also built from default and configured aliases at app startup so Excel fill logic can benefit from aliases.
+Existing `custom_sport_aliases` settings are still merged with defaults for backward compatibility when no authoritative table has been saved. `SPORT_PATTERNS` is also built from the configured aliases at app startup so Excel fill logic can benefit from aliases.
 
 ### Suggested Files
 
 - `common/sports.py`
 - `common/settings.py`
-- optional `common/sport_aliases.json`
+- `common/settings_dialog.py`
 
 ### Acceptance Criteria
 
@@ -471,7 +471,7 @@ Suggested settings:
 - default include-client setting
 - default save folder
 - verbose logging enabled or disabled
-- custom sport aliases
+- sport alias table
 - preferred output filename pattern
 - recent folders
 - log directory

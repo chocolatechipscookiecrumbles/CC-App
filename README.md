@@ -1,6 +1,6 @@
 # NCAA Report Tool
 
-Desktop tool for generating NCAA report workbooks from FRS PDF folders.
+Desktop tool for generating NCAA financial report workbooks from NCAA FRS PDF folders.
 
 The launcher supports four workflows:
 
@@ -9,16 +9,68 @@ The launcher supports four workflows:
 - Revenue reports
 - Total operating expenses reports
 
-## Run From Source
+## Requirements
 
-Recommended environment:
+- Python 3.11 recommended
+- Tkinter support for the selected Python install
+- macOS or Windows for desktop use
+
+Python dependencies are listed in `requirements.txt`:
+
+```text
+pandas
+pdfplumber
+openpyxl
+pytest
+pyinstaller
+```
+
+`tkinter` is part of the Python standard library, but some Python distributions install it separately.
+
+## Setup
+
+Create and activate a virtual environment:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
+
+On Windows:
+
+```powershell
+py -3.11 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
+
+Using `uv` is also supported:
+
+```bash
+uv venv
+source .venv/bin/activate
+uv pip install -r requirements.txt
+```
+
+If you already use the local conda environment for this project:
 
 ```bash
 conda activate toeapp
+python -m pip install -r requirements.txt
+```
+
+## Run From Source
+
+Run the launcher from the repository root:
+
+```bash
 python -m programlauncher
 ```
 
-Without activating the environment:
+With conda, without activating the environment:
 
 ```bash
 conda run -n toeapp python -m programlauncher
@@ -30,29 +82,9 @@ Direct launcher fallback:
 python saui.py
 ```
 
-## Feature Branch
-
-Current feature work lives on:
-
-```bash
-feature/proposed-features-1-6
-```
-
-This branch includes workflow improvements from the proposed feature plan, including:
-
-- input preview before processing
-- detailed progress with cancellation
-- final batch summary
-- structured skipped-file CSVs
-- remembered folders and save locations
-- configurable sport aliases in the launcher Settings window
-- per-run logs
-- Revenue/Ticket Sales validation sheet
-- workbook comparison script
-
 ## Settings
 
-Use the **Settings** button in the top-right corner of the launcher to tune sport alias phrases.
+Use the **Settings** button in the top-right corner of the launcher to tune app preferences.
 
 Settings are stored locally at:
 
@@ -60,12 +92,16 @@ Settings are stored locally at:
 ~/Library/Application Support/NCAA Report Tool/settings.json
 ```
 
-The settings page currently supports:
+On Windows, settings are stored under the user app data folder.
 
-- custom sport alias phrases
-- custom log folder path
+The settings page uses tabs:
 
-Custom aliases are comma-separated phrases that normalize to a target sport name. For example, `TrackandField` and `Track and Field` can both normalize to `XC/TF`.
+- **Sport Aliases**: edit the system-wide sport normalization table, add alias groups, and delete selected rows with confirmation.
+- **Logs**: view the resolved logs folder, set a custom log folder, reset to the default log folder, and copy the logs path.
+
+Sport aliases are comma-separated PDF phrases that normalize to a target sport name. For example, `TrackandField` and `Track and Field` can both normalize to `XC/TF`.
+
+The default aliases appear as regular editable rows beside any rows you add. Adding, editing, or deleting rows updates the table immediately. Click **Save** to persist changes; the Settings window stays open so you can continue editing.
 
 ## Logs And Skipped Reports
 
@@ -90,19 +126,17 @@ Each skipped CSV includes workflow, filename, institution name, reason, extracti
 
 ## Tests
 
-Run tests in the project environment:
-
-```bash
-conda run -n toeapp python -m pytest
-```
-
-The lightweight local test run is:
+Run tests from the repository root:
 
 ```bash
 python -m pytest
 ```
 
-Some tests may skip outside `toeapp` if full PDF dependencies are not installed.
+For the local conda environment:
+
+```bash
+conda run -n toeapp python -m pytest
+```
 
 ## Workbook Comparison
 
@@ -114,11 +148,29 @@ python scripts/compare_workbooks.py baseline.xlsx candidate.xlsx --output compar
 
 The comparison report checks sheet names, dimensions, formulas, and cell values.
 
-## Build Scripts
+## Build And Deploy
 
 Build helpers are in `scripts/`:
 
 - `scripts/build_macos.sh`
 - `scripts/build_windows.ps1`
 
-Generated build/release outputs should stay out of Git. The repo ignores common generated folders such as `build/`, `dist/`, `__pycache__/`, and local test output folders.
+Build from the repository root after installing dependencies:
+
+```bash
+python -m PyInstaller __main__.spec
+```
+
+Or use the platform helper:
+
+```bash
+scripts/build_macos.sh
+```
+
+On Windows:
+
+```powershell
+.\scripts\build_windows.ps1
+```
+
+PyInstaller outputs generated app files under `build/` and `dist/`. These generated folders should stay out of Git.

@@ -29,16 +29,19 @@ Each package contains its own user interface file, PDF extraction logic, data pr
 Tkinter is used to build the desktop graphical user interface. It provides:
 
 - Main program launcher buttons
+- A tabbed Settings window for sport aliases and logs
 - Folder picker dialogs
 - Save-file dialogs
 - Message boxes
 - Client university dropdowns
 - Sport selection checklists
-- Processing windows with progress bars
+- Processing windows with progress details and cancellation
 
 Important files:
 
 - `saui.py`
+- `common/settings_dialog.py`
+- `common/progress.py`
 - `scholar/ui.py`
 - `sportops/ui.py`
 - `rev/ui.py`
@@ -59,6 +62,8 @@ Important implementation details:
 ### Threading
 
 Individual report modules use `threading.Thread` to run PDF parsing in the background while the Tkinter progress window remains responsive. Tkinter updates are returned to the main GUI thread with `root.after(...)`.
+
+The current processing dialog shows PDF count, current institution, extraction stage, skipped count, and a cancel button. Cancellation is cooperative and stops at safe checkpoints between PDFs.
 
 This technique is used in:
 
@@ -148,6 +153,17 @@ Packaging settings include:
 - macOS app bundle generation through `BUNDLE`
 - Collected output under `dist/` and build metadata under `build/`
 
+### Shared Utilities
+
+The project now includes shared utilities under `common/` for cross-workflow behavior:
+
+- `pdf_names.py` and `pdf_manifest.py` centralize PDF name extraction and folder scanning.
+- `dialogs.py`, `progress.py`, and `run_summary.py` support preview dialogs, progress windows, cancellation, and final batch summaries.
+- `report_log.py` writes structured skipped-file CSVs.
+- `settings.py` and `settings_dialog.py` manage persistent settings and the tabbed Settings UI.
+- `sports.py` centralizes sport aliases, sport patterns, and gender-list constants.
+- `logging_config.py` writes per-run logs.
+
 ## High-Level Project Flow
 
 1. The application starts from `__main__.py`.
@@ -158,16 +174,18 @@ Packaging settings include:
    - Revenue
    - TOE
 4. The user chooses whether to include the client university in mean and median calculations.
-5. When the user clicks a report button, the launcher starts that workflow in a separate process.
-6. The selected workflow asks the user to choose a folder containing NCAA FRS PDF files.
-7. The workflow extracts university names from PDFs.
-8. The user selects the client university from a dropdown.
-9. PDF parsing runs in a background thread while a progress bar is shown.
-10. The user chooses output sports or report options if the workflow requires it.
-11. The user chooses where to save the Excel workbook.
-12. The project generates a styled Excel template.
-13. Extracted and processed data is written into the workbook.
-14. The program shows a completion message.
+5. The user may open Settings to configure sport aliases or the log location.
+6. When the user clicks a report button, the launcher starts that workflow in a separate process.
+7. The selected workflow asks the user to choose a folder containing NCAA FRS PDF files.
+8. The workflow builds a PDF manifest and detected institution list.
+9. The user selects the client university from a dropdown.
+10. A preview dialog summarizes the workflow, selected client, include/exclude setting, PDF count, and detected institutions.
+11. PDF parsing runs in a background thread while a detailed progress dialog is shown.
+12. The user chooses output sports or report options if the workflow requires it.
+13. The user chooses where to save the Excel workbook.
+14. The project generates a styled Excel template.
+15. Extracted and processed data is written into the workbook.
+16. The program shows a batch summary with processed/skipped counts, output path, duration, and log path.
 
 ## Entry Point and Launcher Design
 
@@ -201,11 +219,33 @@ Main functions:
 Techniques used:
 
 - A Tkinter root window displays report buttons.
+- A top-right Settings button opens the tabbed Settings window.
 - A `ttk.Combobox` captures whether the client should be included in mean and median calculations.
 - Each report button maps to a wrapper function through `program_map`.
 - The selected report runs in a separate child process.
 - Buttons and dropdowns are disabled while a report process is active.
 - `after(200, check_process)` polls the process without blocking the UI.
+
+### Settings Window
+
+`common/settings_dialog.py` implements a tabbed Settings window.
+
+The Sport Aliases tab:
+
+- Shows instructions and an example for comma-separated aliases.
+- Displays an authoritative two-column table with normalized sport names and PDF phrases.
+- Shows default and saved alias groups as regular editable rows.
+- Lets users add alias groups to the table before saving.
+- Lets users select a row and delete it with a warning.
+- Saves changes without closing the Settings window.
+
+The Logs tab:
+
+- Shows the resolved logs folder.
+- Lets users set a custom log directory.
+- Lets users reset to the default logs directory.
+- Lets users copy the logs path.
+- Explains that skipped CSVs are stored separately in the selected PDF folder.
 
 ## Shared User Interface Methods
 
@@ -214,12 +254,14 @@ Each report workflow follows a similar UI pattern:
 - Hide the root Tkinter window with `root.withdraw()`.
 - Use `messagebox.showinfo(...)` to instruct the user.
 - Use `filedialog.askdirectory(...)` to choose the PDF folder.
-- Build a list of universities from the selected folder.
+- Build a PDF manifest and university list from the selected folder.
 - Use `choose_university(...)` to select the client.
-- Show a modal processing window with an indeterminate progress bar.
+- Show a preview confirmation dialog.
+- Show a modal processing window with detailed progress and cancellation.
 - Run parsing work in a background thread.
 - Use `filedialog.asksaveasfilename(...)` to select the output Excel file.
 - Generate the workbook and write data.
+- Show a final batch summary.
 
 The client selector is implemented in each package's `choose_uni.py`. It creates a topmost `Toplevel` window with a readonly `ttk.Combobox`.
 
@@ -227,7 +269,7 @@ The sport checklist is implemented in each package's `checklist.py`. It lets use
 
 ## University Name Extraction
 
-Each report package includes a `getname.py` file with an `extract_reporting_institution(pdf_path)` function.
+University-name extraction is centralized in `common/pdf_names.py`; package `getname.py` files remain as compatibility wrappers where needed.
 
 Method used:
 
@@ -283,22 +325,23 @@ Extracted values are stored in two dictionaries:
 
 ### Folder Processing
 
-`process_folder(folder_path, exclude_words)` loops through all PDFs in the selected folder.
+`process_folder(folder_path, exclude_words, manifest=...)` loops through PDF records from the shared manifest.
 
 Methods used:
 
 - Skips non-PDF files.
-- Extracts the university name from the PDF.
+- Reuses the university name from the manifest.
 - Extracts male and female scholarship data.
 - Filters out excluded words such as `NCAA`, `Other`, `Expenses`, and `Total`.
 - Tracks unread or empty files.
 - Builds a complete set of detected male and female sports.
-- Normalizes known sport variants:
+- Normalizes known and configured sport variants:
   - Track and field/cross country becomes `XC/TF`
   - Swimming variants become `Swimming and Diving`
   - Acrobatics variants become `Acrobatics and Tumbling`
+- Allows user-defined alias phrases through the Settings window.
 - Creates sorted pandas DataFrames for male and female scholarship data.
-- Writes a text report listing files that could not be read.
+- Writes a structured skipped-file CSV when files could not be read.
 
 ### Excel Generation
 
@@ -332,6 +375,7 @@ Methods used:
 
 - Creates header-to-column mappings from row 3.
 - Uses regex sport patterns to match extracted sport names to workbook headers.
+- Falls back to normalized sport-name matching for unexpected header variants.
 - Writes the client university to row 4.
 - Writes comparison universities starting at row 5.
 - Uses `safe_write(...)` to handle merged cells and blank values.
@@ -464,7 +508,7 @@ This is one of the more advanced techniques in the project because it uses an al
 
 ### Folder Aggregation
 
-`collect_sports_across_pdfs(folder_path)` loops over all PDFs and builds a dictionary of DataFrames.
+`collect_sports_across_pdfs(folder_path, manifest=...)` loops over manifest records and builds a dictionary of DataFrames.
 
 Returned structure:
 
@@ -483,7 +527,7 @@ The function also returns:
 - A set of detected men's sports
 - A set of detected women's sports
 
-Unread PDFs are written to a timestamped text report.
+Unread PDFs are written to a timestamped skipped-file CSV.
 
 ### Excel Generation
 
@@ -569,15 +613,16 @@ Techniques used:
 
 ### Folder Aggregation
 
-`collect_revenue_across_pdfs(folder_path)`:
+`collect_revenue_across_pdfs(folder_path, manifest=...)`:
 
 - Loops through all PDFs in the selected folder.
-- Extracts reporting institution names.
+- Reuses reporting institution names from the manifest.
 - Calls `extract_summary_totals(...)`.
 - Skips unreadable files.
 - Creates a pandas DataFrame with universities as the index.
 - Sorts rows alphabetically.
-- Writes a text report for skipped PDFs.
+- Writes a structured skipped-file CSV for skipped PDFs.
+- Records validation metadata for Ticket Sales and missing revenue categories.
 
 ### Data Processing
 
@@ -620,6 +665,8 @@ The sheet includes:
 - Currency formatting
 - Black fills for unavailable values
 - Optional inclusion of client in average and median formulas
+
+The Revenue workflow also writes a `Validation` sheet containing Ticket Sales status, Ticket Sales value when found, missing/found revenue categories, combination rules, skipped status, and parse errors.
 
 ## Total Operating Expenses Report Workflow
 
@@ -713,16 +760,24 @@ This keeps generated workbooks clean and clearly identifies unavailable data poi
 
 ## Error and Skip Reporting
 
-Each report workflow records files that cannot be parsed successfully.
+Each report workflow records files that cannot be parsed successfully and produces a structured skipped-file CSV only when files are skipped.
 
 Method:
 
-- Maintain a list of skipped or unreadable PDFs.
+- Maintain structured skipped-file records with workflow, filename, institution name, reason, extraction stage, suggested action, optional exception message, and path.
 - After processing, call `write_report(folder_path, items)`.
-- Create a timestamped `.txt` report inside the selected folder.
-- Write the failed filenames to that report.
+- Create a timestamped `skipped_<workflow>_<timestamp>.csv` report inside the selected PDF folder.
+- Omit skipped CSV output when no files were skipped.
 
 This supports auditability because users can see which PDFs were excluded from the final Excel output.
+
+Per-run logs are separate from skipped CSVs. Logs are written to the configured logs folder, defaulting to:
+
+```text
+~/Library/Application Support/NCAA Report Tool/logs
+```
+
+The final batch summary displays the log path for the run.
 
 ## Data Cleaning and Normalization Methods
 
@@ -739,6 +794,7 @@ Cleaning techniques include:
 - Adding spaces inside camel-cased institution names
 - Converting comma-formatted numbers to integers
 - Mapping sport aliases into standard labels
+- Applying the system-wide sport alias table from Settings
 - Filtering rows with words like `expenses`, `team`, `total`, and `other`
 
 ## Report Styling Methods
@@ -765,6 +821,17 @@ programlauncher/
   __main__.py
   saui.py
   __main__.spec
+  common/
+    dialogs.py
+    logging_config.py
+    pdf_manifest.py
+    pdf_names.py
+    progress.py
+    report_log.py
+    run_summary.py
+    settings.py
+    settings_dialog.py
+    sports.py
   scholar/
     ui.py
     extract_scholarships.py
@@ -868,32 +935,33 @@ The project uses fallback strategies because PDF formatting varies by institutio
 - Uses openpyxl for professional Excel formatting and formulas.
 - Includes fallback parsing strategies for inconsistent PDF layouts.
 - Includes algorithmic correction for gender-column misattribution in sport operating budgets.
-- Produces audit reports for skipped PDFs.
+- Produces structured skipped-file CSVs and per-run logs.
+- Provides preview, progress, cancellation, and final batch summaries.
+- Supports configurable sport aliases from the launcher Settings window.
+- Adds Revenue/Ticket Sales validation output.
+- Includes automated tests for shared parsing, settings, logging, validation sheets, and workbook comparison helpers.
 - Supports packaging as a desktop app with PyInstaller.
 
 ## Limitations and Considerations
 
 - PDF parsing depends on consistent enough NCAA FRS text extraction.
 - Many extraction rules are regex-based, so unusual PDF layouts may still fail.
-- The project has repeated helper files across report packages, such as `choose_uni.py`, `getname.py`, and `write_report.py`.
+- Some package-level helper files remain as compatibility wrappers, although key behavior has been centralized in `common/`.
 - Some debug `print(...)` statements remain in processing modules.
-- There is no dedicated automated test suite in the source tree, although `testoutputs1/` contains generated Excel outputs.
 - Dependency versions are not pinned in a requirements file in the project root.
 - Packaged build artifacts are stored in the same tree as source files, which can make navigation harder.
 
 ## Possible Future Improvements
 
 - Add a `requirements.txt` or `pyproject.toml` with pinned dependencies.
-- Add automated unit tests for regex extraction functions.
 - Add sample PDFs or mocked text fixtures for repeatable testing.
-- Consolidate duplicated helper modules into shared utilities.
-- Add structured logging instead of debug prints.
-- Add a validation summary at the end of each report run.
-- Store skipped-file reports with report-specific names.
-- Add clearer error handling when no data is extracted from a folder.
-- Add a configuration file for sport mappings and NCAA category mappings.
+- Continue consolidating remaining compatibility wrappers into shared utilities.
+- Replace remaining debug prints with structured logging.
+- Add deeper PDF quality checks before processing.
+- Add command-line report generation for automated runs.
+- Add report template presets by client or conference.
 - Exclude generated `build/`, `dist/`, and `__pycache__/` files from source control.
 
 ## Summary
 
-This Python project is a practical desktop automation tool for generating NCAA financial comparison reports. It combines Tkinter for user interaction, pdfplumber for PDF extraction, pandas for data organization, openpyxl for Excel report generation, and PyInstaller for desktop packaging. The project's main technical work is in robust PDF parsing, sport and category normalization, dynamic Excel template generation, statistical formula construction, and user-guided report customization.
+This Python project is a practical desktop automation tool for generating NCAA financial comparison reports. It combines Tkinter for user interaction, pdfplumber for PDF extraction, pandas for data organization, openpyxl for Excel report generation, and PyInstaller for desktop packaging. The project's main technical work is in robust PDF parsing, sport and category normalization, dynamic Excel template generation, statistical formula construction, configurable user settings, structured run reporting, and user-guided report customization.

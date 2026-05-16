@@ -22,6 +22,7 @@ DEFAULT_SETTINGS = {
     "verbose_logging": False,
     "preferred_output_filename_pattern": "{workflow}_{client}_{date}.xlsx",
     "custom_sport_aliases": {},
+    "sport_aliases": None,
     "log_directory": "",
 }
 
@@ -67,7 +68,62 @@ def logs_dir() -> Path:
     configured = load_settings().get("log_directory", "")
     if configured:
         return Path(configured)
+    return default_logs_dir()
+
+
+def default_logs_dir() -> Path:
     return _settings_dir() / "logs"
+
+
+def reset_log_directory() -> None:
+    next_settings = load_settings()
+    next_settings["log_directory"] = ""
+    save_settings(next_settings)
+
+
+def _clean_alias_mapping(value: Any) -> dict[str, list[str]]:
+    if not isinstance(value, dict):
+        return {}
+
+    clean_aliases = {}
+    for canonical, values in value.items():
+        canonical_name = str(canonical).strip()
+        if not canonical_name:
+            continue
+        if isinstance(values, str):
+            values = [values]
+        if isinstance(values, list):
+            clean_values = []
+            seen = set()
+            for item in values:
+                alias = str(item).strip()
+                if not alias:
+                    continue
+                key = alias.casefold()
+                if key in seen:
+                    continue
+                seen.add(key)
+                clean_values.append(alias)
+            if clean_values:
+                clean_aliases[canonical_name] = clean_values
+    return clean_aliases
+
+
+def _merge_alias_mappings(*mappings: dict[str, list[str]]) -> dict[str, list[str]]:
+    merged = {}
+    canonical_lookup = {}
+    for mapping in mappings:
+        for canonical, aliases in mapping.items():
+            key = canonical.casefold()
+            target = canonical_lookup.setdefault(key, canonical)
+            merged.setdefault(target, [])
+            seen = {alias.casefold() for alias in merged[target]}
+            for alias in aliases:
+                if alias.casefold() in seen:
+                    continue
+                seen.add(alias.casefold())
+                merged[target].append(alias)
+    return merged
 
 
 def _validate_settings(data: Any) -> dict[str, Any]:
@@ -91,16 +147,9 @@ def _validate_settings(data: Any) -> dict[str, Any]:
         recent = []
     settings["recent_pdf_folders"] = [str(path) for path in recent if path][:5]
 
-    aliases = settings.get("custom_sport_aliases", {})
-    if not isinstance(aliases, dict):
-        aliases = {}
-    clean_aliases = {}
-    for canonical, values in aliases.items():
-        if isinstance(values, str):
-            values = [values]
-        if isinstance(values, list):
-            clean_aliases[str(canonical)] = [str(value) for value in values if str(value).strip()]
-    settings["custom_sport_aliases"] = clean_aliases
+    settings["custom_sport_aliases"] = _clean_alias_mapping(settings.get("custom_sport_aliases", {}))
+    sport_aliases = settings.get("sport_aliases")
+    settings["sport_aliases"] = _clean_alias_mapping(sport_aliases) if isinstance(sport_aliases, dict) else None
     return settings
 
 
@@ -151,3 +200,17 @@ def update_setting(key: str, value: Any) -> None:
 
 def get_custom_sport_aliases() -> dict[str, list[str]]:
     return load_settings().get("custom_sport_aliases", {})
+
+
+def get_sport_aliases(default_aliases: dict[str, list[str]]) -> dict[str, list[str]]:
+    current_settings = load_settings()
+    saved_aliases = current_settings.get("sport_aliases")
+    if saved_aliases is not None:
+        return saved_aliases
+    return _merge_alias_mappings(default_aliases, current_settings.get("custom_sport_aliases", {}))
+
+
+def save_sport_aliases(alias_mapping: dict[str, list[str]]) -> None:
+    next_settings = load_settings()
+    next_settings["sport_aliases"] = _clean_alias_mapping(alias_mapping)
+    save_settings(next_settings)
